@@ -607,28 +607,131 @@ async function adminLogout() {
           <div className="message">{message}</div>
         )}
 
-        <section className="panel">
-          <h2>🔎 ابحث عن منتجاتك</h2>
+        
+<section className="panel">
+  {!isAdmin ? (
+    <>
+      <button
+        className="admin-toggle"
+        onClick={() => setShowAdmin(!showAdmin)}
+      >
+        {showAdmin ? 'إغلاق تسجيل الدخول' : '⚙️ دخول الإدارة'}
+      </button>
+
+      {showAdmin && (
+        <>
+          <h2>🔐 تسجيل دخول المدير</h2>
+
+          <form onSubmit={adminLogin}>
+            <input
+              type="email"
+              placeholder="البريد الإلكتروني"
+              value={adminEmail}
+              onChange={e => setAdminEmail(e.target.value)}
+              required
+            />
+
+            <input
+              type="password"
+              placeholder="كلمة المرور"
+              value={adminPassword}
+              onChange={e => setAdminPassword(e.target.value)}
+              required
+            />
+
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving}
+            >
+              {saving ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
+            </button>
+          </form>
+        </>
+      )}
+    </>
+  ) : (
+    <>
+      <h2>⚙️ لوحة إدارة متجر الجرادي</h2>
+
+      <button
+        className="delete"
+        onClick={adminLogout}
+      >
+        تسجيل الخروج
+      </button>
+
+      <h2>➕ إضافة منتج جديد</h2>
+
+      <form onSubmit={addProduct}>
+        <div className="form-grid">
+          <input
+            name="name"
+            placeholder="اسم المنتج"
+            value={form.name}
+            onChange={updateForm}
+            required
+          />
 
           <input
-            className="search"
-            placeholder="ابحث عن منتج..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            name="price"
+            type="number"
+            min="0"
+            placeholder="السعر"
+            value={form.price}
+            onChange={updateForm}
+            required
+          />
+
+          <input
+            name="stock"
+            type="number"
+            min="0"
+            placeholder="الكمية"
+            value={form.stock}
+            onChange={updateForm}
           />
 
           <select
-            value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
+            name="category_id"
+            value={form.category_id}
+            onChange={updateForm}
           >
-            <option value="all">جميع الأقسام</option>
+            <option value="">اختر القسم</option>
             {categories.map(category => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
             ))}
           </select>
-        </section>
+
+          <input
+            name="image_url"
+            placeholder="رابط صورة المنتج (اختياري)"
+            value={form.image_url}
+            onChange={updateForm}
+          />
+
+          <textarea
+            name="description"
+            placeholder="وصف المنتج"
+            value={form.description}
+            onChange={updateForm}
+          />
+        </div>
+
+        <button
+          className="primary"
+          type="submit"
+          disabled={saving}
+        >
+          {saving ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
+        </button>
+      </form>
+    </>
+  )}
+</section>
+
 
         <section className="panel">
           <h2>🛒 منتجات متجر الجرادي</h2>

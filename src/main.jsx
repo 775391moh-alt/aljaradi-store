@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
@@ -28,11 +27,7 @@ function ProductImage({ product }) {
   const src = product.image_url || productImages[product.name];
 
   if (!src || failed) {
-    return (
-      <div className="product-image-placeholder">
-        🍎
-      </div>
-    );
+    return <div className="product-image-placeholder">🍎</div>;
   }
 
   return (
@@ -40,6 +35,7 @@ function ProductImage({ product }) {
       className="product-image"
       src={src}
       alt={product.name}
+      loading="lazy"
       onError={() => setFailed(true)}
     />
   );
@@ -47,19 +43,21 @@ function ProductImage({ product }) {
 
 function App() {
   const [products, setProducts] = useState([]);
-  const [session, setSession] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [session, setSession] = useState(null);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [message, setMessage] = useState('');
-  const [showAdmin, setShowAdmin] = useState(false);
-const [adminEmail, setAdminEmail] = useState('');
-const [adminPassword, setAdminPassword] = useState('');
+  const [showLogin, setShowLogin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [newCategory, setNewCategory] = useState('');
 
-const isAdmin = session?.user?.id === ADMIN_UID;
+  const isAdmin = session?.user?.id === ADMIN_UID;
+
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -69,135 +67,161 @@ const isAdmin = session?.user?.id === ADMIN_UID;
     category_id: ''
   });
 
+  const money = (value) =>
+    Number(value || 0).toLocaleString('en-US') + ' ر.ي';
+
   async function loadData() {
     setLoading(true);
 
-    const [pr, cr] = await Promise.all([
-      supabase.from('products').select('*').order('created_at', {
-        ascending: false
-      }),
-      supabase.from('categories').select('*').order('name')
-    ]);
+    try {
+      const [productsResult, categoriesResult] = await Promise.all([
+        supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('categories')
+          .select('*')
+          .order('name', { ascending: true })
+      ]);
 
-    if (pr.error) {
-      setMessage('خطأ تحميل المنتجات: ' + pr.error.message);
-    } else {
-      setProducts(pr.data || []);
+      if (productsResult.error) {
+        setMessage('خطأ تحميل المنتجات: ' + productsResult.error.message);
+      } else {
+        setProducts(productsResult.data || []);
+      }
+
+      if (categoriesResult.error) {
+        setMessage('خطأ تحميل الأقسام: ' + categoriesResult.error.message);
+      } else {
+        setCategories(categoriesResult.data || []);
+      }
+    } catch (error) {
+      setMessage('حدث خطأ أثناء تحميل بيانات المتجر: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-
-    if (cr.error) {
-      setMessage('خطأ تحميل الأقسام: ' + cr.error.message);
-    } else {
-      setCategories(cr.data || []);
-    }
-
-    setLoading(false);
   }
 
   useEffect(() => {
     loadData();
   }, []);
-useEffect(() => {
-  let active = true;
 
-  supabase.auth.getSession().then(({ data }) => {
-    if (active) {
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        setMessage('تعذر التحقق من جلسة الدخول: ' + error.message);
+        return;
+      }
       setSession(data.session);
-    }
-  });
-
-  const {
-    data: { subscription }
-  } = supabase.auth.onAuthStateChange((_event, newSession) => {
-    if (!active) return;
-
-    setSession(newSession);
-
-    if (newSession?.user?.id !== ADMIN_UID) {
-      setShowAdmin(false);
-    }
-  });
-
-  return () => {
-    active = false;
-    subscription.unsubscribe();
-  };
-}, []);
-  
-async function adminLogin(e) {
-  e.preventDefault();
-  setSaving(true);
-  setMessage('');
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: adminEmail.trim(),
-    password: adminPassword
-  });
-
-  if (error) {
-    setMessage('فشل تسجيل الدخول: ' + error.message);
-    setSaving(false);
-    return;
-  }
-
-  if (data.user?.id !== ADMIN_UID) {
-    await supabase.auth.signOut();
-    setSession(null);
-    setMessage('هذا الحساب ليس حساب المدير المعتمد');
-    setSaving(false);
-    return;
-  }
-
-  setSession(data.session);
-  setAdminPassword('');
-  setShowAdmin(true);
-  setMessage('تم تسجيل دخول المدير بنجاح');
-  setSaving(false);
-}
-
-async function adminLogout() {
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    setMessage('تعذر تسجيل الخروج: ' + error.message);
-    return;
-  }
-
-  setShowAdmin(false);
-  setMessage('تم تسجيل الخروج');
-}
-  
-  const money = (value) =>
-    Number(value || 0).toLocaleString('en-US') + ' ر.ي';
-
-  function updateForm(e) {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value
     });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!active) return;
+      setSession(newSession);
+      if (newSession?.user?.id !== ADMIN_UID) {
+        setShowLogin(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function adminLogin(event) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage('');
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: adminEmail.trim(),
+        password: adminPassword
+      });
+
+      if (error) {
+        setMessage('فشل تسجيل الدخول: ' + error.message);
+        return;
+      }
+
+      if (data.user?.id !== ADMIN_UID) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setMessage('هذا الحساب ليس حساب المدير المعتمد');
+        return;
+      }
+
+      setSession(data.session);
+      setAdminPassword('');
+      setShowLogin(false);
+      setMessage('تم تسجيل دخول المدير بنجاح');
+    } catch (error) {
+      setMessage('حدث خطأ أثناء تسجيل الدخول: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function addProduct(e) {
-    e.preventDefault();
+  async function adminLogout() {
+    setSaving(true);
+    const { error } = await supabase.auth.signOut();
+    setSaving(false);
+
+    if (error) {
+      setMessage('تعذر تسجيل الخروج: ' + error.message);
+      return;
+    }
+
+    setSession(null);
+    setShowLogin(false);
+    setMessage('تم تسجيل الخروج');
+  }
+
+  function updateForm(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function addProduct(event) {
+    event.preventDefault();
+
+    if (!isAdmin) {
+      setMessage('يجب تسجيل الدخول بحساب المدير أولاً');
+      return;
+    }
+
+    if (Number(form.price) < 0 || Number(form.stock || 0) < 0) {
+      setMessage('السعر والكمية لا يمكن أن يكونا أقل من صفر');
+      return;
+    }
+
     setSaving(true);
     setMessage('');
 
     const product = {
       name: form.name.trim(),
-      description: form.description,
+      description: form.description.trim(),
       price: Number(form.price),
       stock: Number(form.stock || 0),
-      image_url: form.image_url || null,
-      category_id: form.category_id || null
+      image_url: form.image_url.trim() || null,
+      category_id: form.category_id ? Number(form.category_id) : null
     };
 
-    const { error } = await supabase
-      .from('products')
-      .insert([product]);
+    try {
+      const { error } = await supabase.from('products').insert([product]);
 
-    if (error) {
-      setMessage('تعذرت الإضافة: ' + error.message);
-    } else {
+      if (error) {
+        setMessage('تعذرت إضافة المنتج: ' + error.message);
+        return;
+      }
+
       setMessage('تمت إضافة المنتج بنجاح');
       setForm({
         name: '',
@@ -207,27 +231,85 @@ async function adminLogout() {
         image_url: '',
         category_id: ''
       });
-      await loadData();
+            await loadData();
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   async function deleteProduct(id) {
-    if (!window.confirm('هل تريد حذف المنتج؟')) return;
+    if (!isAdmin) {
+      setMessage('غير مسموح: هذه العملية للمدير فقط');
+      return;
+    }
 
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
+    if (!window.confirm('هل تريد حذف هذا المنتج؟')) return;
+
+    setSaving(true);
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    setSaving(false);
 
     if (error) {
-      setMessage(error.message);
-    } else {
-      setCart(old => old.filter(item => item.id !== id));
-      setMessage('تم حذف المنتج');
-      await loadData();
+      setMessage('تعذر حذف المنتج: ' + error.message);
+      return;
     }
+
+    setCart((current) => current.filter((item) => item.id !== id));
+    setMessage('تم حذف المنتج');
+    await loadData();
+  }
+
+  async function addCategory(event) {
+    event.preventDefault();
+
+    if (!isAdmin) {
+      setMessage('يجب تسجيل الدخول بحساب المدير أولاً');
+      return;
+    }
+
+    const name = newCategory.trim();
+    if (!name) return;
+
+    setSaving(true);
+    const { error } = await supabase.from('categories').insert([{ name }]);
+    setSaving(false);
+
+    if (error) {
+      setMessage('تعذرت إضافة القسم: ' + error.message);
+      return;
+    }
+
+    setNewCategory('');
+    setMessage('تمت إضافة القسم بنجاح');
+    await loadData();
+  }
+
+  async function deleteCategory(id) {
+    if (!isAdmin) {
+      setMessage('غير مسموح: هذه العملية للمدير فقط');
+      return;
+    }
+
+    if (!window.confirm('هل تريد حذف هذا القسم؟')) return;
+
+    setSaving(true);
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    setSaving(false);
+
+    if (error) {
+      setMessage(
+        'تعذر حذف القسم. قد يكون مرتبطاً بمنتجات موجودة. التفاصيل: ' +
+        error.message
+      );
+      return;
+    }
+
+    if (String(categoryFilter) === String(id)) {
+      setCategoryFilter('all');
+    }
+
+    setMessage('تم حذف القسم');
+    await loadData();
   }
 
   function addToCart(product) {
@@ -236,11 +318,11 @@ async function adminLogout() {
       return;
     }
 
-    setCart(old => {
-      const found = old.find(item => item.id === product.id);
+    setCart((current) => {
+      const found = current.find((item) => item.id === product.id);
 
       if (found) {
-        return old.map(item =>
+        return current.map((item) =>
           item.id === product.id
             ? {
                 ...item,
@@ -253,37 +335,41 @@ async function adminLogout() {
         );
       }
 
-      return [...old, { ...product, quantity: 1 }];
+      return [...current, { ...product, quantity: 1 }];
     });
 
     setMessage('تمت إضافة ' + product.name + ' إلى السلة');
   }
 
   function changeQuantity(id, amount) {
-    setCart(old =>
-      old.map(item =>
-        item.id === id
-          ? {
-              ...item,
-              quantity: Math.max(
-                0,
-                Math.min(
-                  item.quantity + amount,
-                  Number(item.stock || 0)
+    setCart((current) =>
+      current
+        .map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                quantity: Math.max(
+                  0,
+                  Math.min(
+                    item.quantity + amount,
+                    Number(item.stock || 0)
+                  )
                 )
-              )
-            }
-          : item
-      ).filter(item => item.quantity > 0)
+              }
+            : item
+        )
+        .filter((item) => item.quantity > 0)
     );
   }
 
   const cartCount = cart.reduce(
-    (sum, item) => sum + item.quantity, 0
+    (sum, item) => sum + item.quantity,
+    0
   );
 
   const cartTotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity, 0
+    (sum, item) => sum + Number(item.price || 0) * item.quantity,
+    0
   );
 
   function checkout() {
@@ -298,14 +384,14 @@ async function adminLogout() {
     const address = window.prompt('اكتب عنوان التوصيل:');
     if (!address || !address.trim()) return;
 
-    let text = `طلب جديد من متجر الجرادي 🍎\n`;
-    text += `الاسم: ${customer}\n`;
-    text += `العنوان: ${address}\n\n`;
-    text += `المنتجات:\n`;
+    let text = 'طلب جديد من متجر الجرادي 🍎\n';
+    text += `الاسم: ${customer.trim()}\n`;
+    text += `العنوان: ${address.trim()}\n\n`;
+    text += 'المنتجات:\n';
 
-    cart.forEach(item => {
+    cart.forEach((item) => {
       text += `${item.name} × ${item.quantity} = ${money(
-        item.price * item.quantity
+        Number(item.price) * item.quantity
       )}\n`;
     });
 
@@ -318,11 +404,10 @@ async function adminLogout() {
     window.open(url, '_blank');
   }
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name
-      .toLowerCase()
-      .includes(search.toLowerCase());
-
+  const filteredProducts = products.filter((product) => {
+    const productName = String(product.name || '').toLowerCase();
+    const searchText = search.trim().toLowerCase();
+    const matchesSearch = productName.includes(searchText);
     const matchesCategory =
       categoryFilter === 'all' ||
       String(product.category_id) === String(categoryFilter);
@@ -332,7 +417,6 @@ async function adminLogout() {
 
   return (
     <div dir="rtl" className="app">
-
       <style>{`
         * { box-sizing: border-box; }
 
@@ -343,20 +427,17 @@ async function adminLogout() {
           color: #24352b;
         }
 
+        button, input, select, textarea { font-family: inherit; }
         .app { min-height: 100vh; }
 
         .header {
-          background: #176b3a;
+          background: linear-gradient(135deg, #176b3a, #24864d);
           color: white;
           padding: 28px 15px;
           text-align: center;
         }
 
-        .header h1 {
-          margin: 0 0 8px;
-          font-size: 28px;
-        }
-
+        .header h1 { margin: 0 0 8px; font-size: 28px; }
         .header p { margin: 5px; }
 
         .container {
@@ -380,19 +461,17 @@ async function adminLogout() {
         }
 
         .stat { text-align: center; }
-
         .stat strong {
           display: block;
           font-size: 23px;
-          color: #176b3a;
+                    color: #176b3a;
         }
 
         .panel { margin-bottom: 20px; }
-
         .panel h2 {
           color: #176b3a;
           font-size: 20px;
-          margin-top: 0;
+          margin: 0 0 15px;
         }
 
         input, select, textarea {
@@ -400,16 +479,17 @@ async function adminLogout() {
           padding: 12px;
           border: 1px solid #d8e1d9;
           border-radius: 8px;
-          font-family: inherit;
           font-size: 15px;
           margin-bottom: 10px;
           background: white;
           min-width: 0;
         }
 
+        textarea { min-height: 44px; resize: vertical; }
+
         .form-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
         }
 
@@ -417,15 +497,11 @@ async function adminLogout() {
           border: none;
           border-radius: 8px;
           padding: 12px 16px;
-          font-family: inherit;
           font-size: 15px;
           cursor: pointer;
         }
 
-        button:disabled {
-          opacity: .5;
-          cursor: not-allowed;
-        }
+        button:disabled { opacity: .5; cursor: not-allowed; }
 
         .primary {
           background: #176b3a;
@@ -433,13 +509,16 @@ async function adminLogout() {
           width: 100%;
         }
 
-        .search { margin-bottom: 10px; }
+        .admin-toggle {
+          background: #e7f3e9;
+          color: #176b3a;
+          width: 100%;
+          margin-bottom: 15px;
+        }
 
         .products {
           display: grid;
-          grid-template-columns: repeat(
-            auto-fill, minmax(155px, 1fr)
-          );
+          grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
           gap: 13px;
         }
 
@@ -448,10 +527,10 @@ async function adminLogout() {
           border-radius: 12px;
           overflow: hidden;
           border: 1px solid #e5ebe5;
+          min-width: 0;
         }
 
-        .product-image,
-        .product-image-placeholder {
+        .product-image, .product-image-placeholder {
           width: 100%;
           height: 145px;
           object-fit: cover;
@@ -465,12 +544,7 @@ async function adminLogout() {
         }
 
         .product-info { padding: 12px; }
-
-        .product h3 {
-          margin: 0 0 8px;
-          font-size: 17px;
-        }
-
+        .product h3 { margin: 0 0 8px; font-size: 17px; }
         .price {
           color: #176b3a;
           font-size: 18px;
@@ -478,15 +552,8 @@ async function adminLogout() {
           margin-bottom: 8px;
         }
 
-        .description {
-          color: #69766c;
-          font-size: 13px;
-        }
-
-        .stock {
-          font-size: 13px;
-          color: #657368;
-        }
+        .description { color: #69766c; font-size: 13px; }
+        .stock { font-size: 13px; color: #657368; }
 
         .add-cart {
           width: 100%;
@@ -511,12 +578,7 @@ async function adminLogout() {
           border-bottom: 1px solid #eee;
         }
 
-        .quantity {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
+        .quantity { display: flex; align-items: center; gap: 10px; }
         .quantity button {
           background: #e7f3e9;
           color: #176b3a;
@@ -555,11 +617,19 @@ async function adminLogout() {
           border-radius: 12px;
         }
 
-        .admin-toggle {
-          background: #e7f3e9;
-          color: #176b3a;
-          width: 100%;
-          margin-bottom: 15px;
+        .category-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 0;
+          border-bottom: 1px solid #eee;
+        }
+
+        .category-row .delete {
+          width: auto;
+          margin: 0;
+          padding: 8px 12px;
         }
 
         .footer {
@@ -571,12 +641,11 @@ async function adminLogout() {
         @media(max-width: 600px) {
           .form-grid { grid-template-columns: 1fr; }
           .header h1 { font-size: 23px; }
-          .products {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+          .products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .stats { grid-template-columns: repeat(3, 1fr); }
           .stat { padding: 12px 5px; font-size: 12px; }
           .stat strong { font-size: 20px; }
+          .product-image, .product-image-placeholder { height: 125px; }
         }
       `}</style>
 
@@ -587,7 +656,6 @@ async function adminLogout() {
       </header>
 
       <main className="container">
-
         <div className="stats">
           <div className="stat">
             <strong>{products.length}</strong>
@@ -604,163 +672,186 @@ async function adminLogout() {
         </div>
 
         {message && (
-          <div className="message">{message}</div>
+          <div className="message" role="status">{message}</div>
         )}
 
-        
-<section className="panel">
-  {!isAdmin ? (
-    <>
-      <button
-        className="admin-toggle"
-        onClick={() => setShowAdmin(!showAdmin)}
-      >
-        {showAdmin ? 'إغلاق تسجيل الدخول' : '⚙️ دخول الإدارة'}
-      </button>
+        <section className="panel">
+          {!isAdmin ? (
+            <>
+              <button
+                className="admin-toggle"
+                onClick={() => setShowLogin((value) => !value)}
+              >
+                {showLogin ? 'إغلاق تسجيل الدخول' : '⚙️ دخول الإدارة'}
+              </button>
 
-      {showAdmin && (
-        <>
-          <h2>🔐 تسجيل دخول المدير</h2>
+              {showLogin && (
+                <>
+                  <h2>🔐 تسجيل دخول المدير</h2>
+                  <form onSubmit={adminLogin}>
+                    <input
+                      type="email"
+                      placeholder="البريد الإلكتروني"
+                      value={adminEmail}
+                      onChange={(event) => setAdminEmail(event.target.value)}
+                      required
+                    />
+                    <input
+                              type="password"
+                      placeholder="كلمة المرور"
+                      value={adminPassword}
+                      onChange={(event) => setAdminPassword(event.target.value)}
+                      required
+                    />
+                    <button className="primary" type="submit" disabled={saving}>
+                      {saving ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
+                    </button>
+                  </form>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <h2>⚙️ لوحة إدارة متجر الجرادي</h2>
+              <button className="delete" onClick={adminLogout} disabled={saving}>
+                تسجيل الخروج
+              </button>
 
-          <form onSubmit={adminLogin}>
-            <input
-              type="email"
-              placeholder="البريد الإلكتروني"
-              value={adminEmail}
-              onChange={e => setAdminEmail(e.target.value)}
-              required
-            />
+              <h2 style={{ marginTop: 22 }}>➕ إضافة منتج جديد</h2>
+              <form onSubmit={addProduct}>
+                <div className="form-grid">
+                  <input
+                    name="name"
+                    placeholder="اسم المنتج"
+                    value={form.name}
+                    onChange={updateForm}
+                    required
+                  />
+                  <input
+                    name="price"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="السعر"
+                    value={form.price}
+                    onChange={updateForm}
+                    required
+                  />
+                  <input
+                    name="stock"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="الكمية"
+                    value={form.stock}
+                    onChange={updateForm}
+                  />
+                  <select
+                    name="category_id"
+                    value={form.category_id}
+                    onChange={updateForm}
+                  >
+                    <option value="">اختر القسم</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="image_url"
+                    type="url"
+                    placeholder="رابط صورة المنتج (اختياري)"
+                    value={form.image_url}
+                    onChange={updateForm}
+                  />
+                  <textarea
+                    name="description"
+                    placeholder="وصف المنتج"
+                    value={form.description}
+                    onChange={updateForm}
+                  />
+                </div>
+                <button className="primary" type="submit" disabled={saving}>
+                  {saving ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
+                </button>
+              </form>
 
-            <input
-              type="password"
-              placeholder="كلمة المرور"
-              value={adminPassword}
-              onChange={e => setAdminPassword(e.target.value)}
-              required
-            />
+              <h2 style={{ marginTop: 24 }}>📂 إدارة الأقسام</h2>
+              <form onSubmit={addCategory}>
+                <input
+                  value={newCategory}
+                  onChange={(event) => setNewCategory(event.target.value)}
+                  placeholder="اسم القسم الجديد"
+                  required
+                />
+                <button className="primary" type="submit" disabled={saving}>
+                  إضافة القسم
+                </button>
+              </form>
 
-            <button
-              className="primary"
-              type="submit"
-              disabled={saving}
-            >
-              {saving ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
-            </button>
-          </form>
-        </>
-      )}
-    </>
-  ) : (
-    <>
-      <h2>⚙️ لوحة إدارة متجر الجرادي</h2>
+              {categories.length === 0 ? (
+                <p className="description">لا توجد أقسام حالياً.</p>
+              ) : (
+                categories.map((category) => (
+                  <div className="category-row" key={category.id}>
+                    <span>{category.name}</span>
+                    <button
+                      className="delete"
+                      onClick={() => deleteCategory(category.id)}
+                      disabled={saving}
+                    >
+                      حذف القسم
+                    </button>
+                  </div>
+                ))
+              )}
+            </>
+          )}
+        </section>
 
-      <button
-        className="delete"
-        onClick={adminLogout}
-      >
-        تسجيل الخروج
-      </button>
+        <section className="panel">
+          <h2>🛒 منتجات متجر الجرادي</h2>
 
-      <h2>➕ إضافة منتج جديد</h2>
-
-      <form onSubmit={addProduct}>
-        <div className="form-grid">
           <input
-            name="name"
-            placeholder="اسم المنتج"
-            value={form.name}
-            onChange={updateForm}
-            required
-          />
-
-          <input
-            name="price"
-            type="number"
-            min="0"
-            placeholder="السعر"
-            value={form.price}
-            onChange={updateForm}
-            required
-          />
-
-          <input
-            name="stock"
-            type="number"
-            min="0"
-            placeholder="الكمية"
-            value={form.stock}
-            onChange={updateForm}
+            className="search"
+            type="search"
+            placeholder="🔎 ابحث عن منتج..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
 
           <select
-            name="category_id"
-            value={form.category_id}
-            onChange={updateForm}
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
           >
-            <option value="">اختر القسم</option>
-            {categories.map(category => (
+            <option value="all">جميع الأقسام</option>
+            {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
             ))}
           </select>
 
-          <input
-            name="image_url"
-            placeholder="رابط صورة المنتج (اختياري)"
-            value={form.image_url}
-            onChange={updateForm}
-          />
-
-          <textarea
-            name="description"
-            placeholder="وصف المنتج"
-            value={form.description}
-            onChange={updateForm}
-          />
-        </div>
-
-        <button
-          className="primary"
-          type="submit"
-          disabled={saving}
-        >
-          {saving ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
-        </button>
-      </form>
-    </>
-  )}
-</section>
-
-
-        <section className="panel">
-          <h2>🛒 منتجات متجر الجرادي</h2>
-
           {loading ? (
             <div className="empty">جارٍ تحميل المنتجات...</div>
           ) : filteredProducts.length === 0 ? (
-            <div className="empty">لا توجد منتجات حالياً</div>
+            <div className="empty">لا توجد منتجات مطابقة حالياً</div>
           ) : (
             <div className="products">
-              {filteredProducts.map(product => (
+              {filteredProducts.map((product) => (
                 <article className="product" key={product.id}>
                   <ProductImage product={product} />
-
                   <div className="product-info">
                     <h3>{product.name}</h3>
-
-                    <div className="price">
-                      {money(product.price)}
-                    </div>
+                    <div className="price">{money(product.price)}</div>
 
                     {product.description && (
-                      <p className="description">
-                        {product.description}
-                      </p>
+                      <p className="description">{product.description}</p>
                     )}
 
                     <p className="stock">
-                      المتوفر: {product.stock || 0}
+                      المتوفر: {Number(product.stock || 0)}
                     </p>
 
                     <button
@@ -773,10 +864,11 @@ async function adminLogout() {
                         : 'غير متوفر'}
                     </button>
 
-                    {showAdmin && (
+                    {isAdmin && (
                       <button
                         className="delete"
                         onClick={() => deleteProduct(product.id)}
+                        disabled={saving}
                       >
                         حذف المنتج
                       </button>
@@ -792,12 +884,10 @@ async function adminLogout() {
           <h2>🛒 سلة المشتريات</h2>
 
           {cart.length === 0 ? (
-            <div className="empty">
-              السلة فارغة، اختر منتجاتك أولاً
-            </div>
+            <div className="empty">السلة فارغة، اختر منتجاتك أولاً</div>
           ) : (
             <>
-              {cart.map(item => (
+              {cart.map((item) => (
                 <div className="cart-item" key={item.id}>
                   <div>
                     <strong>{item.name}</strong>
@@ -805,14 +895,10 @@ async function adminLogout() {
                   </div>
 
                   <div className="quantity">
-                    <button
-                      onClick={() => changeQuantity(item.id, -1)}
-                    >
+                    <button onClick={() => changeQuantity(item.id, -1)}>
                       −
                     </button>
-
                     <strong>{item.quantity}</strong>
-
                     <button
                       disabled={item.quantity >= Number(item.stock)}
                       onClick={() => changeQuantity(item.id, 1)}
@@ -823,111 +909,19 @@ async function adminLogout() {
                 </div>
               ))}
 
-              <div className="total">
-                الإجمالي: {money(cartTotal)}
-              </div>
-
-              <button
-                className="whatsapp"
-                onClick={checkout}
-              >
+              <div className="total">الإجمالي: {money(cartTotal)}</div>
+              <button className="whatsapp" onClick={checkout}>
                 🟢 إتمام الطلب عبر واتساب
               </button>
             </>
           )}
         </section>
-
-        <section className="panel">
-          <button
-            className="admin-toggle"
-            onClick={() => setShowAdmin(!showAdmin)}
-          >
-            {showAdmin ? 'إخفاء إدارة المنتجات' : '⚙️ إدارة المنتجات'}
-          </button>
-
-          {showAdmin && (
-            <>
-              <h2>➕ إضافة منتج جديد</h2>
-
-              <form onSubmit={addProduct}>
-                <div className="form-grid">
-                  <input
-                    name="name"
-                    placeholder="اسم المنتج"
-                    value={form.name}
-                    onChange={updateForm}
-                    required
-                  />
-
-                  <input
-                    name="price"
-                    type="number"
-                    min="0"
-                    placeholder="السعر"
-                    value={form.price}
-                    onChange={updateForm}
-                    required
-                  />
-
-                  <input
-                    name="stock"
-                    type="number"
-                    min="0"
-                    placeholder="الكمية"
-                    value={form.stock}
-                    onChange={updateForm}
-                  />
-
-                  <select
-                    name="category_id"
-                    value={form.category_id}
-                    onChange={updateForm}
-                  >
-                    <option value="">اختر القسم</option>
-                    {categories.map(category => (
-                      <option
-                        key={category.id}
-                        value={category.id}
-                      >
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    name="image_url"
-                    placeholder="رابط صورة المنتج (اختياري)"
-                    value={form.image_url}
-                    onChange={updateForm}
-                  />
-
-                  <textarea
-                    name="description"
-                    placeholder="وصف المنتج"
-                    value={form.description}
-                    onChange={updateForm}
-                  />
-                </div>
-
-                <button
-                  className="primary"
-                  type="submit"
-                  disabled={saving}
-                >
-                  {saving ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
-                </button>
-              </form>
-            </>
-          )}
-        </section>
-
       </main>
 
       <footer className="footer">
         جميع الحقوق محفوظة © متجر الجرادي للخضار والفواكه
         <p>للطلب والاستفسار: 775391755</p>
       </footer>
-
     </div>
   );
 }
@@ -937,3 +931,4 @@ createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
+                          

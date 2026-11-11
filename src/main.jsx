@@ -47,6 +47,7 @@ function ProductImage({ product }) {
 
 function App() {
   const [products, setProducts] = useState([]);
+  const [session, setSession] = useState(null);
   const [categories, setCategories] = useState([]);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);

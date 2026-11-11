@@ -9,6 +9,7 @@ const supabase = createClient(
 );
 
 const WHATSAPP = '967775391755';
+const ADMIN_UID = '1f44acd9-5c17-4ee5-8249-408fa7bcd3b4';
 
 const productImages = {
   'طماطم': 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=600',

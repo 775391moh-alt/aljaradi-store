@@ -123,6 +123,50 @@ useEffect(() => {
     subscription.unsubscribe();
   };
 }, []);
+  
+async function adminLogin(e) {
+  e.preventDefault();
+  setSaving(true);
+  setMessage('');
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: adminEmail.trim(),
+    password: adminPassword
+  });
+
+  if (error) {
+    setMessage('فشل تسجيل الدخول: ' + error.message);
+    setSaving(false);
+    return;
+  }
+
+  if (data.user?.id !== ADMIN_UID) {
+    await supabase.auth.signOut();
+    setSession(null);
+    setMessage('هذا الحساب ليس حساب المدير المعتمد');
+    setSaving(false);
+    return;
+  }
+
+  setSession(data.session);
+  setAdminPassword('');
+  setShowAdmin(true);
+  setMessage('تم تسجيل دخول المدير بنجاح');
+  setSaving(false);
+}
+
+async function adminLogout() {
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    setMessage('تعذر تسجيل الخروج: ' + error.message);
+    return;
+  }
+
+  setShowAdmin(false);
+  setMessage('تم تسجيل الخروج');
+}
+  
   const money = (value) =>
     Number(value || 0).toLocaleString('en-US') + ' ر.ي';
 

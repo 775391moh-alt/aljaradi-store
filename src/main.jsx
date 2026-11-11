@@ -56,7 +56,10 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [message, setMessage] = useState('');
   const [showAdmin, setShowAdmin] = useState(false);
+const [adminEmail, setAdminEmail] = useState('');
+const [adminPassword, setAdminPassword] = useState('');
 
+const isAdmin = session?.user?.id === ADMIN_UID;
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -94,7 +97,32 @@ function App() {
   useEffect(() => {
     loadData();
   }, []);
+useEffect(() => {
+  let active = true;
 
+  supabase.auth.getSession().then(({ data }) => {
+    if (active) {
+      setSession(data.session);
+    }
+  });
+
+  const {
+    data: { subscription }
+  } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    if (!active) return;
+
+    setSession(newSession);
+
+    if (newSession?.user?.id !== ADMIN_UID) {
+      setShowAdmin(false);
+    }
+  });
+
+  return () => {
+    active = false;
+    subscription.unsubscribe();
+  };
+}, []);
   const money = (value) =>
     Number(value || 0).toLocaleString('en-US') + ' ر.ي';
 

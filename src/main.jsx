@@ -231,7 +231,7 @@ function App() {
         image_url: '',
         category_id: ''
       });
-            await loadData();
+      await loadData();
     } finally {
       setSaving(false);
     }
@@ -247,6 +247,7 @@ function App() {
 
     setSaving(true);
     const { error } = await supabase.from('products').delete().eq('id', id);
+    setSaving(false);
     setSaving(false);
 
     if (error) {
@@ -384,19 +385,19 @@ function App() {
     const address = window.prompt('اكتب عنوان التوصيل:');
     if (!address || !address.trim()) return;
 
-    let text = 'طلب جديد من متجر الجرادي 🍎\n';
-    text += `الاسم: ${customer.trim()}\n`;
-    text += `العنوان: ${address.trim()}\n\n`;
-    text += 'المنتجات:\n';
+    let text = 'طلب جديد من متجر الجرادي 🍎\\n';
+    text += `الاسم: ${customer.trim()}\\n`;
+    text += `العنوان: ${address.trim()}\\n\\n`;
+    text += 'المنتجات:\\n';
 
     cart.forEach((item) => {
       text += `${item.name} × ${item.quantity} = ${money(
         Number(item.price) * item.quantity
-      )}\n`;
+      )}\\n`;
     });
 
-    text += `\nالإجمالي: ${money(cartTotal)}`;
-    text += '\n\nأرجو تأكيد الطلب.';
+    text += `\\nالإجمالي: ${money(cartTotal)}`;
+    text += '\\n\\nأرجو تأكيد الطلب.';
 
     const url =
       `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(text)}`;
@@ -431,20 +432,56 @@ function App() {
         .app { min-height: 100vh; }
 
         .header {
-          background: linear-gradient(135deg, #176b3a, #24864d);
+          background: linear-gradient(135deg, #124d31, #21834b 58%, #70a83c);
           color: white;
-          padding: 28px 15px;
-          text-align: center;
+          padding: 18px 4%;
+          box-shadow: 0 5px 20px #174b3026;
+        }
+        .header-top {
+          max-width: 1160px;
+          margin: auto;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-mark {
+          width: 58px; height: 58px; border-radius: 18px;
+          display: grid; place-items: center; font-size: 34px;
+          background: #ffffff20; border: 1px solid #ffffff55;
+          box-shadow: inset 0 0 15px #ffffff20;
+        }
+        .brand h1 { margin: 0 0 4px; font-size: 25px; }
+        .brand p { margin: 0; color: #e5f5e8; font-size: 13px; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .header-admin, .header-cart {
+          color: #174b30; background: #fff; font-weight: bold;
+          padding: 10px 14px; white-space: nowrap;
+        }
+        .hero-copy { max-width: 1160px; margin: 18px auto 0; text-align: center; }
+        .hero-copy h2 { margin: 0 0 7px; font-size: 21px; }
+        .hero-copy p { margin: 0; color: #e5f5e8; }
+        .delivery-banner {
+          max-width: 1160px; margin: 15px auto 0; padding: 11px 15px;
+          border-radius: 12px; text-align: center; color: #23452d;
+          background: linear-gradient(90deg, #f5e9b6, #fff8dc, #f5e9b6);
+          font-weight: bold; box-shadow: 0 3px 12px #00000012;
         }
 
-        .header h1 { margin: 0 0 8px; font-size: 28px; }
-        .header p { margin: 5px; }
-
-        .container {
-          width: 94%;
-          max-width: 1100px;
-          margin: 22px auto;
+        .container { width: 94%; max-width: 1160px; margin: 22px auto; }
+        .category-chips { display: flex; gap: 9px; overflow-x: auto; padding: 3px 1px 12px; }
+        .category-chip {
+          flex: 0 0 auto; border-radius: 30px; padding: 9px 17px;
+          color: #27613b; background: #edf5ed; border: 1px solid #dcebdd;
         }
+        .category-chip.active { color: white; background: #1d7543; border-color: #1d7543; box-shadow: 0 4px 10px #1d754333; }
+        .product-controls { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+        .product-controls button { padding: 8px 12px; background: #e8f3e9; color: #176b3a; font-weight: bold; }
+        .product-controls .add-cart { flex: 1; padding: 10px 7px; background: #176b3a; color: white; margin: 0; }
+        .product-controls .qty-number { min-width: 18px; text-align: center; font-weight: bold; }
+        .footer { background: #153f2b; color: #e8f3e9; text-align: center; padding: 28px 15px; line-height: 1.9; }
+        .footer a { display: inline-block; color: white; background: #168b50; text-decoration: none; padding: 9px 18px; border-radius: 25px; margin-top: 8px; }
 
         .stats {
           display: grid;
@@ -464,7 +501,7 @@ function App() {
         .stat strong {
           display: block;
           font-size: 23px;
-                    color: #176b3a;
+          color: #176b3a;
         }
 
         .panel { margin-bottom: 20px; }
@@ -509,12 +546,7 @@ function App() {
           width: 100%;
         }
 
-        .admin-toggle {
-          background: #e7f3e9;
-          color: #176b3a;
-          width: 100%;
-          margin-bottom: 15px;
-        }
+        .admin-toggle { background: #e7f3e9; color: #176b3a; width: 100%; margin-bottom: 15px; }
 
         .products {
           display: grid;
@@ -568,91 +600,33 @@ function App() {
           width: 100%;
           margin-top: 8px;
         }
-
-        .cart-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 0;
-          border-bottom: 1px solid #eee;
-        }
-
-        .quantity { display: flex; align-items: center; gap: 10px; }
-        .quantity button {
-          background: #e7f3e9;
-          color: #176b3a;
-          padding: 7px 12px;
-          font-weight: bold;
-        }
-
-        .total {
-          font-size: 21px;
-          font-weight: bold;
-          color: #176b3a;
-          margin: 15px 0;
-        }
-
-        .whatsapp {
-          background: #168b50;
-          color: white;
-          width: 100%;
-          font-size: 17px;
-        }
-
-        .message {
-          background: #e8f5e9;
-          color: #176b3a;
-          padding: 12px;
-          border-radius: 8px;
-          margin-bottom: 15px;
-          overflow-wrap: anywhere;
-        }
-
-        .empty {
-          text-align: center;
-          padding: 30px;
-          color: #777;
-          background: white;
-          border-radius: 12px;
-        }
-
-        .category-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 10px;
-          padding: 9px 0;
-          border-bottom: 1px solid #eee;
-        }
-
-        .category-row .delete {
-          width: auto;
-          margin: 0;
-          padding: 8px 12px;
-        }
-
-        .footer {
-          text-align: center;
-          padding: 25px;
-          color: #718071;
-        }
-
-        @media(max-width: 600px) {
-          .form-grid { grid-template-columns: 1fr; }
-          .header h1 { font-size: 23px; }
-          .products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .stats { grid-template-columns: repeat(3, 1fr); }
-          .stat { padding: 12px 5px; font-size: 12px; }
-          .stat strong { font-size: 20px; }
-          .product-image, .product-image-placeholder { height: 125px; }
-        }
       `}</style>
-
-      <header className="header">
-        <h1>🍎 متجر الجرادي</h1>
-        <p>للخضار والفواكه الطازجة</p>
-        <p>جودة طازجة وأسعار مناسبة</p>
+            <header className="header">
+        <div className="header-top">
+          <div className="brand">
+            <div className="brand-mark" aria-hidden="true">🥬</div>
+            <div>
+              <h1>متجر الجرادي</h1>
+              <p>للخضار والفواكه الطازجة</p>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button className="header-admin" onClick={() => {
+              if (isAdmin) {
+                document.getElementById('admin-panel')?.scrollIntoView({ behavior: 'smooth' });
+              } else {
+                setShowLogin((value) => !value);
+                setTimeout(() => document.getElementById('admin-panel')?.scrollIntoView({ behavior: 'smooth' }), 80);
+              }
+            }}>{isAdmin ? '⚙️ الإدارة' : 'دخول الإدارة'}</button>
+            <button className="header-cart" onClick={() => document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth' })}>🛒 {cartCount}</button>
+          </div>
+        </div>
+        <div className="hero-copy">
+          <h2>كل ما تحتاجه من الطازج... نوصله إلى باب بيتك</h2>
+          <p>جودة طازجة وأسعار مناسبة وخدمة تهتم بك</p>
+        </div>
+        <div className="delivery-banner">🚚 التوصيل مجاناً داخل محافظة حجة وبرسوم رمزية خارج المحافظة</div>
       </header>
 
       <main className="container">
@@ -675,16 +649,9 @@ function App() {
           <div className="message" role="status">{message}</div>
         )}
 
-        <section className="panel">
+        <section className="panel" id="admin-panel">
           {!isAdmin ? (
             <>
-              <button
-                className="admin-toggle"
-                onClick={() => setShowLogin((value) => !value)}
-              >
-                {showLogin ? 'إغلاق تسجيل الدخول' : '⚙️ دخول الإدارة'}
-              </button>
-
               {showLogin && (
                 <>
                   <h2>🔐 تسجيل دخول المدير</h2>
@@ -697,7 +664,7 @@ function App() {
                       required
                     />
                     <input
-                              type="password"
+                      type="password"
                       placeholder="كلمة المرور"
                       value={adminPassword}
                       onChange={(event) => setAdminPassword(event.target.value)}
@@ -809,8 +776,7 @@ function App() {
             </>
           )}
         </section>
-
-        <section className="panel">
+                <section className="panel">
           <h2>🛒 منتجات متجر الجرادي</h2>
 
           <input
@@ -821,17 +787,16 @@ function App() {
             onChange={(event) => setSearch(event.target.value)}
           />
 
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-          >
-            <option value="all">جميع الأقسام</option>
+          <div className="category-chips" aria-label="أقسام المنتجات">
+            <button className={`category-chip ${categoryFilter === 'all' ? 'active' : ''}`} onClick={() => setCategoryFilter('all')}>الكل</button>
             {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
+              <button
+                key={category.id}
+                className={`category-chip ${String(categoryFilter) === String(category.id) ? 'active' : ''}`}
+                onClick={() => setCategoryFilter(String(category.id))}
+              >{category.name}</button>
             ))}
-          </select>
+          </div>
 
           {loading ? (
             <div className="empty">جارٍ تحميل المنتجات...</div>
@@ -854,15 +819,24 @@ function App() {
                       المتوفر: {Number(product.stock || 0)}
                     </p>
 
-                    <button
-                      className="add-cart"
-                      disabled={Number(product.stock || 0) <= 0}
-                      onClick={() => addToCart(product)}
-                    >
-                      {Number(product.stock || 0) > 0
-                        ? '➕ أضف إلى السلة'
-                        : 'غير متوفر'}
-                    </button>
+                    <div className="product-controls">
+                      {(() => {
+                        const cartItem = cart.find((item) => item.id === product.id);
+                        const quantity = cartItem?.quantity || 0;
+                        return quantity > 0 ? (
+                          <>
+                            <button aria-label="تقليل الكمية" onClick={() => changeQuantity(product.id, -1)}>−</button>
+                            <span className="qty-number">{quantity}</span>
+                            <button aria-label="زيادة الكمية" disabled={quantity >= Number(product.stock || 0)} onClick={() => changeQuantity(product.id, 1)}>+</button>
+                          </>
+                        ) : null;
+                      })()}
+                      <button
+                        className="add-cart"
+                        disabled={Number(product.stock || 0) <= 0}
+                        onClick={() => addToCart(product)}
+                      >{Number(product.stock || 0) > 0 ? (cart.some((item) => item.id === product.id) ? 'أضف المزيد' : 'أضف إلى السلة') : 'غير متوفر'}</button>
+                    </div>
 
                     {isAdmin && (
                       <button
@@ -919,8 +893,11 @@ function App() {
       </main>
 
       <footer className="footer">
-        جميع الحقوق محفوظة © متجر الجرادي للخضار والفواكه
+        <strong>متجر الجرادي للخضار والفواكه</strong>
+        <p>📍 مدينة حجة، مبنى نقابة السائقين، جوار محطة البنزين</p>
         <p>للطلب والاستفسار: 775391755</p>
+        <a href={`https://wa.me/${WHATSAPP}`} target="_blank" rel="noreferrer">تواصل معنا عبر واتساب</a>
+        <p>جميع الحقوق محفوظة © متجر الجرادي</p>
       </footer>
     </div>
   );
@@ -931,4 +908,3 @@ createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
-                          

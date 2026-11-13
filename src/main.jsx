@@ -54,6 +54,9 @@ function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [view, setView] = useState(window.location.hash === '#/admin/login' ? 'admin-login' : 'store');
   const [customerDetails, setCustomerDetails] = useState({ name: '', phone: '', address: '', landmark: '', notes: '' });
+  const [deliveryLocation, setDeliveryLocation] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [newCategory, setNewCategory] = useState('');
@@ -168,6 +171,49 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  async function loadOrders() {
+    if (!isAdmin) return;
+
+    setOrdersLoading(true);
+    try {
+      const { data: orderRows, error: ordersError } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (ordersError) throw ordersError;
+
+      const safeOrders = orderRows || [];
+      if (!safeOrders.length) {
+        setOrders([]);
+        return;
+      }
+
+      const orderIds = safeOrders.map((order) => order.id);
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .in('order_id', orderIds);
+
+      if (itemsError) throw itemsError;
+
+      setOrders(safeOrders.map((order) => ({
+        ...order,
+        items: (itemRows || []).filter((item) => String(item.order_id) === String(order.id))
+      })));
+    } catch (error) {
+      setMessage('تعذر تحميل الطلبات: ' + (error?.message || 'حدث خطأ غير معروف'));
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isAdmin) loadOrders();
+    else setOrders([]);
+  }, [isAdmin]);
 
   async function adminLogin(event) {
     event.preventDefault();
@@ -453,7 +499,34 @@ function App() {
     setCustomerDetails((current) => ({ ...current, [name]: value }));
   }
 
-  function checkout(event) {
+  function selectDeliveryLocation() {
+    if (!navigator.geolocation) {
+      setMessage('متصفحك لا يدعم تحديد الموقع. يمكنك إكمال الطلب بكتابة العنوان.');
+      return;
+    }
+
+    setMessage('جارٍ تحديد موقع التوصيل...');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setDeliveryLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setMessage('تم تحديد موقع التوصيل. يمكنك إزالة الموقع أو متابعة الطلب.');
+      },
+      (error) => {
+        const errorMessage = error.code === 1
+          ? 'لم تسمح بمشاركة الموقع. لا بأس، يمكنك إكمال الطلب بكتابة العنوان.'
+          : error.code === 2
+            ? 'تعذر تحديد الموقع حالياً. يمكنك إكمال الطلب بكتابة العنوان.'
+            : 'استغرق تحديد الموقع وقتاً طويلاً. يمكنك المحاولة مجدداً أو كتابة العنوان.';
+        setMessage(errorMessage);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  async function checkout(event) {
     event.preventDefault();
     if (!storeSettings.storeOpen) {
       setMessage('المتجر مغلق حالياً، نعتذر عن استقبال الطلبات.');
@@ -470,22 +543,60 @@ function App() {
       return;
     }
 
-    let orderText = 'طلب جديد من متجر الجرادي 🍎\n';
-    orderText += `الاسم: ${name.trim()}\n`;
-    orderText += `رقم الهاتف: ${phone.trim()}\n`;
-    orderText += `عنوان التوصيل: ${address.trim()}\n`;
-    orderText += `أقرب معلم: ${landmark.trim()}\n`;
-    if (notes.trim()) orderText += `ملاحظات: ${notes.trim()}\n`;
-    orderText += '\nالمنتجات:\n';
+    setSaving(true);
+    setMessage('جارٍ حفظ طلبك...');
 
-    cart.forEach((item) => {
-      orderText += `${item.name} × ${item.quantity} = ${money(Number(item.price) * item.quantity)}\n`;
-    });
-    orderText += `\nالإجمالي: ${money(cartTotal)}\n\nأرجو تأكيد الطلب.`;
+    try {
+      const orderItems = cart.map((item) => ({
+        product_id: Number(item.id),
+        quantity: Number(item.quantity)
+      }));
 
-    const url = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(orderText)}`;
-    // الانتقال من نفس الصفحة يساعد متصفح الهاتف على تسليم الرابط لتطبيق واتساب المثبت.
-    window.location.href = url;
+      const { data, error } = await supabase.rpc('create_customer_order', {
+        p_customer_name: name.trim(),
+        p_phone: phone.trim(),
+        p_address: address.trim(),
+        p_landmark: landmark.trim(),
+        p_items: orderItems,
+        p_delivery_latitude: deliveryLocation?.latitude ?? null,
+        p_delivery_longitude: deliveryLocation?.longitude ?? null
+      });
+
+      if (error) throw error;
+
+      const savedOrder = Array.isArray(data) ? data[0] : data;
+      const orderId = savedOrder?.order_id;
+      const savedTotal = Number(savedOrder?.total ?? cartTotal);
+
+      let orderText = 'طلب جديد من متجر الجرادي 🍎\n';
+      if (orderId) orderText += `رقم الطلب: ${orderId}\n`;
+      orderText += `الاسم: ${name.trim()}\n`;
+      orderText += `رقم الهاتف: ${phone.trim()}\n`;
+      orderText += `عنوان التوصيل: ${address.trim()}\n`;
+      orderText += `أقرب معلم: ${landmark.trim()}\n`;
+      if (deliveryLocation) {
+        orderText += `موقع التوصيل: https://www.google.com/maps?q=${deliveryLocation.latitude},${deliveryLocation.longitude}\n`;
+      }
+      if (notes.trim()) orderText += `ملاحظات للتوصيل: ${notes.trim()}\n`;
+      orderText += '\nالمنتجات:\n';
+
+      cart.forEach((item) => {
+        orderText += `${item.name} × ${item.quantity} = ${money(Number(item.price) * item.quantity)}\n`;
+      });
+      orderText += `\nالإجمالي: ${money(savedTotal)}\n\nتم تسجيل الطلب في المتجر، يرجى تأكيده.`;
+
+      setCart([]);
+      setCustomerDetails({ name: '', phone: '', address: '', landmark: '', notes: '' });
+      setDeliveryLocation(null);
+      setMessage(`تم تسجيل طلبك بنجاح${orderId ? ` برقم ${orderId}` : ''}. سيتم فتح واتساب لإرسال تفاصيله.`);
+
+      const url = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(orderText)}`;
+      window.location.href = url;
+    } catch (error) {
+      setMessage('تعذر حفظ الطلب: ' + (error?.message || 'حدث خطأ غير معروف') + '. لم يتم إرسال الطلب. حاول مرة أخرى.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   const filteredProducts = products.filter((product) => {
@@ -540,7 +651,7 @@ function App() {
           padding: 18px 4%;
           box-shadow: 0 5px 20px #174b3026;
         }
-        .header-top {
+    header-top {
           max-width: 1160px;
           margin: auto;
           display: flex;
@@ -699,6 +810,28 @@ function App() {
           border-top: 2px solid #e5ece3; margin-top: 12px; padding-top: 14px;
           color: #176b3a; font-size: 18px; font-weight: bold;
         }
+        .quantity { display: flex; align-items: center; gap: 9px; }
+        .quantity button { border: 0; border-radius: 7px; background: #edf5ed; color: #176b3a; padding: 7px 11px; font-weight: bold; }
+        .quantity button:disabled { opacity: .45; }
+        .total { display: flex; justify-content: space-between; border-top: 2px solid #e5ece3; margin-top: 12px; padding-top: 14px; color: #176b3a; font-size: 18px; font-weight: bold; }
+        .checkout-form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+        .checkout-form input, .checkout-form textarea { width: 100%; min-width: 0; border: 1px solid #d8e2d7; border-radius: 9px; padding: 11px 12px; background: #fff; font: inherit; outline-color: #4a9b60; }
+        .checkout-form textarea { min-height: 75px; resize: vertical; }
+        .location-box { border: 1px dashed #b8d4bd; background: #f5faf4; border-radius: 11px; padding: 12px; }
+        .location-box p { margin: 0 0 9px; color: #49624e; font-size: 13px; line-height: 1.7; }
+        .location-status { color: #176b3a; font-size: 12px; margin-top: 8px; }
+        .admin-orders-list { display: flex; flex-direction: column; gap: 12px; }
+        .admin-order-card { border: 1px solid #e0e8df; border-radius: 12px; padding: 13px; background: #fbfdfb; }
+        .admin-order-heading, .admin-order-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .admin-order-heading { color: #245a36; margin-bottom: 8px; }
+        .order-status { background: #e8f5e9; color: #21623a; border-radius: 20px; padding: 4px 10px; font-size: 12px; }
+        .admin-order-card p { margin: 6px 0; line-height: 1.7; font-size: 13px; }
+        .admin-order-items { border-top: 1px solid #e8eee7; margin-top: 9px; padding-top: 9px; font-size: 13px; line-height: 1.8; }
+        .admin-order-footer { border-top: 1px solid #e8eee7; margin-top: 9px; padding-top: 10px; }
+        .map-link { color: #176b3a; font-weight: bold; text-decoration: none; }
+        .no-location, .admin-note { color: #788379; font-size: 12px; }
+        .whatsapp { width: 100%; border: 0; border-radius: 9px; padding: 13px 16px; cursor: pointer; background: #176b3a; color: #fff; font-weight: bold; font-size: 15px; }
+        .whatsapp:disabled { opacity: .55; cursor: not-allowed; }
         .admin-product-row {
           display: flex; justify-content: space-between; align-items: center;
           gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf0ec;
@@ -879,9 +1012,8 @@ function App() {
             )}
           </>
         )}
-                </section>
 
-        <section className="panel" id="cart">
+        <section className="panel" id="cart-panel">
           <h2>🛒 سلة المشتريات</h2>
 
           {cart.length === 0 ? (
@@ -956,25 +1088,79 @@ function App() {
                   />
                 </div>
 
+                <div className="location-box">
+                  <p>مشاركة موقع التوصيل اختيارية، وتساعدنا في الوصول إليك بسهولة. يمكنك متابعة الطلب بكتابة العنوان فقط.</p>
+                  <div className="button-row">
+                    <button className="btn secondary" type="button" onClick={selectDeliveryLocation} disabled={saving}>📍 تحديد موقعي</button>
+                    {deliveryLocation && (
+                      <button className="btn secondary" type="button" onClick={() => { setDeliveryLocation(null); setMessage('تم إلغاء مشاركة الموقع. يمكنك إكمال الطلب بالعنوان المكتوب.'); }}>إزالة الموقع</button>
+                    )}
+                  </div>
+                  {deliveryLocation && <div className="location-status">✓ تم تحديد الموقع وإرفاقه بالطلب.</div>}
+                </div>
+
                 <textarea
                   name="notes"
                   value={customerDetails.notes}
                   onChange={updateCustomerDetails}
-                  placeholder="ملاحظات إضافية (اختياري)"
+                  placeholder="ملاحظات للتوصيل (اختياري)"
                 />
 
                 <button
                   className="whatsapp"
                   type="submit"
-                  disabled={!storeSettings.storeOpen || cart.length === 0}
+                  disabled={!storeSettings.storeOpen || cart.length === 0 || saving}
                 >
-                  🟢 إرسال الطلب إلى واتساب
+                  {saving ? 'جارٍ حفظ الطلب...' : '🟢 تسجيل الطلب وإرساله إلى واتساب'}
                 </button>
               </form>
             </>
           )}
         </section>
       </main>
+
+      {isAdmin && (
+        <section className="panel admin-orders-panel" id="admin-panel">
+          <div className="section-title">
+            <h2>لوحة الإدارة — الطلبات الواردة</h2>
+            <button className="btn secondary" type="button" onClick={loadOrders} disabled={ordersLoading}>
+              {ordersLoading ? 'جارٍ التحديث...' : 'تحديث الطلبات'}
+            </button>
+          </div>
+          {ordersLoading && orders.length === 0 ? (
+            <div className="loading">جارٍ تحميل الطلبات...</div>
+          ) : orders.length === 0 ? (
+            <div className="empty-state">لا توجد طلبات محفوظة حتى الآن.</div>
+          ) : (
+            <div className="admin-orders-list">
+              {orders.map((order) => (
+                <article className="admin-order-card" key={order.id}>
+                  <div className="admin-order-heading">
+                    <strong>طلب رقم #{order.id}</strong>
+                    <span className="order-status">{order.status || 'جديد'}</span>
+                  </div>
+                  <p><strong>الزبون:</strong> {order.customer_name || '—'} — {order.phone || '—'}</p>
+                  <p><strong>العنوان:</strong> {order.address || '—'} {order.landmark ? `، ${order.landmark}` : ''}</p>
+                  <p><strong>التاريخ:</strong> {order.created_at ? new Date(order.created_at).toLocaleString('ar-YE') : '—'}</p>
+                  <div className="admin-order-items">
+                    <strong>المنتجات:</strong>
+                    {order.items?.length ? order.items.map((item) => (
+                      <div key={item.id}>منتج #{item.product_id} × {item.quantity} — {money(Number(item.price) * Number(item.quantity))}</div>
+                    )) : <div>لا توجد تفاصيل منتجات ظاهرة.</div>}
+                  </div>
+                  <div className="admin-order-footer">
+                    <strong>الإجمالي: {money(order.total)}</strong>
+                    {order.delivery_latitude != null && order.delivery_longitude != null ? (
+                      <a className="map-link" href={`https://www.google.com/maps?q=${order.delivery_latitude},${order.delivery_longitude}`} target="_blank" rel="noreferrer">📍 فتح موقع التوصيل</a>
+                    ) : <span className="no-location">لم يشارك الزبون موقعه</span>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <p className="admin-note">هذه المرحلة تعرض الطلبات ومواقع التوصيل فقط. اعتماد الطلب وخصم المخزون وإصدار الفاتورة سنربطها بعد تجهيز إجراءاتها الآمنة.</p>
+        </section>
+      )}
 
       <footer className="footer">
         <strong>متجر الجرادي للخضار والفواكه</strong>
